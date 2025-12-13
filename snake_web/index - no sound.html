@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Commodore 64 Snake</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #fff;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        /* Normal document flow: header, emulator, footer stacked */
+        body {
+            text-align: center;
+            padding-top: 1rem;
+            padding-bottom: 0.75rem;
+        }
+
+        header {
+            margin-bottom: 0.75rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* Emulator wrapper: responsive, keeps 4:3, but does NOT force page height */
+        .emulator-wrapper {
+            /* Width is limited by:
+            - 90% of viewport width
+            - 80% of viewport height converted to width at 4:3
+            - 960px on large monitors
+            This keeps the height <= 80vh and maintains 4:3.
+            */
+            width: min(90vw, 90vh * 4 / 3, 960px);
+            aspect-ratio: 4 / 3;
+            margin: 0 auto 0.75rem auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #111;
+            border-radius: 8px;
+            box-shadow: 0 0 18px rgba(255, 255, 255, 0.18);
+        }
+
+
+        /* If you still want to cap the emulator to 80% viewport height, add: */
+        @media (min-aspect-ratio: 4/3) {
+            .emulator-wrapper {
+                max-height: 80vh;
+            }
+        }
+
+        /* Canvas fills the wrapper, pixels stay crisp */
+        #c64-canvas {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            padding: 0;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        footer {
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        footer a {
+            color: #fff;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        footer a:hover {
+            border-bottom-color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Commodore 64 Snake</h1>
+    </header>
+
+    <div class="emulator-wrapper">
+        <!-- Internal resolution; CSS scales it responsively -->
+        <canvas id="c64-canvas" width="384" height="288"></canvas>
+    </div>
+
+    <footer>
+        <a href="https://github.com/cgchandler/snake" target="_blank" rel="noopener noreferrer">
+            View source on GitHub
+        </a>
+    </footer>
+
+    <script type="text/javascript">
+        // VICE arguments
+        // +sound disables sound (avoids sound buffer error).
+        var viceArguments = [
+            '+sound',
+            '-autostartprgmode', '1',
+            '-autostart', 'snake.prg'
+        ];
+
+        console.log('VICE args:', viceArguments);
+
+        function loadSnakePrg() {
+            console.log('Fetching snake.prg...');
+
+            addRunDependency('snake-prg');
+
+            fetch('snake.prg')
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch snake.prg: ' + response.status);
+                    }
+                    return response.arrayBuffer();
+                })
+                .then(function (buffer) {
+                    var bytes = new Uint8Array(buffer);
+                    console.log('snake.prg size:', bytes.length, 'bytes');
+
+                    FS.createDataFile(
+                        '/',
+                        'snake.prg',
+                        bytes,
+                        true,
+                        true
+                    );
+
+                    console.log('snake.prg created in FS:', FS.readdir('/'));
+                    removeRunDependency('snake-prg');
+                })
+                .catch(function (err) {
+                    console.error('Error loading snake.prg:', err);
+                    removeRunDependency('snake-prg');
+                });
+        }
+
+        var Module = {
+            preRun: [loadSnakePrg],
+            arguments: viceArguments,
+            canvas: document.getElementById('c64-canvas'),
+            onRuntimeInitialized: function () {
+                console.log('VICE.js runtime initialized');
+            }
+        };
+    </script>
+
+    <script src="js/x64.js"></script>
+</body>
+</html>
