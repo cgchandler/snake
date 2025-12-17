@@ -31,6 +31,11 @@
 
 #define SID_MODE_VOL    (*(volatile byte*)0xD418)
 
+#define CIA1_TA_LO      (*(volatile byte*)0xDC04)
+#define CIA1_TA_HI      (*(volatile byte*)0xDC05)
+#define VIC_RASTER      (*(volatile byte*)0xD012)
+
+
 // Control bits
 #define SID_CTRL_GATE   0x01
 #define SID_CTRL_SYNC   0x02
@@ -110,6 +115,7 @@ static word hud_lastHighScore = 0xFFFF;
 static byte highScoreFlashCount = 0;   // how many toggles left
 static byte highScoreFlashTimer = 0;   // frames until next toggle
 static byte highScoreFlashOn    = 0;   // 1 when digits visible during flash
+
 
 // Forward declarations
 byte snake_delay_quadratic(byte length);
@@ -293,6 +299,17 @@ void hud_update(void)
             screen_print_number(36, 0, TheGame.highScore, 3, VCOL_WHITE);
             hud_lastHighScore = TheGame.highScore;
         }
+    }
+}
+
+// Initialize the random number generation using CIA and Current Scan Line
+void random_init(void)
+{
+    // Seed RNG after user interaction so it differs each run
+    {
+        unsigned seed = ((unsigned)CIA1_TA_HI << 8) | CIA1_TA_LO;
+        seed ^= (unsigned)VIC_RASTER;
+        srand(seed);
     }
 }
 
@@ -869,7 +886,7 @@ void read_input(sbyte *jx, sbyte *jy, byte *btn)
 
     if (g_controlMode == CTRL_JOYSTICK)
     {
-        // joystick only
+        // joystick only (port 2)
         joy_poll(0);
         *jx  = joyx[0];
         *jy  = joyy[0];
@@ -906,8 +923,7 @@ void select_controls(void)
 	screen_print_petscii(8,  18, "        S = DOWN", VCOL_YELLOW);
 	screen_print_petscii(8,  19, "        D = RIGHT", VCOL_YELLOW);
 
-
-    // Wait for J or K
+    // Wait for J or K selection
     while (1)
     {
         vic_waitFrame();
@@ -918,6 +934,7 @@ void select_controls(void)
             g_controlMode = CTRL_JOYSTICK;
             break;
         }
+
         if (key_pressed(KSCAN_K))
         {
             g_controlMode = CTRL_KEYBOARD;
@@ -925,9 +942,9 @@ void select_controls(void)
         }
     }
 
-    // Optional: clear back to normal game screen
     screen_init();
 }
+
 
 // Main game loop, invoked every vsync
 void game_loop(void)
@@ -1019,6 +1036,9 @@ int main(void)
     // Ask player which input to use
     select_controls();
 	
+    // Init random number generation
+    random_init();
+
 	// Start the game in ready state	
 	game_state(GS_READY);
 
