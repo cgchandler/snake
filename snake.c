@@ -3,6 +3,7 @@
 #include <c64/joystick.h>
 #include <c64/vic.h>
 #include <c64/keyboard.h>
+#include <c64/types.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -53,27 +54,27 @@
 #define PETSCII_BLOCK   160     // PETSCII code for solid block (used for borders)
 
 // Position/Direction on screen
-struct Point
+typedef struct
 {
 	sbyte	x, y;
-};
+} Point;
 
-struct Snake
+typedef struct
 {
 	Point	head;		// Position of head
 	Point	dir;		// Direction of head
 	Point	tail[256];	// Position of tail
 	byte	length;		// Length of tail
 	byte	pos;		// Tail start
-};
+} Snake;
 
-enum GameState
+typedef enum 
 {
 	GS_READY,		// Getting ready
 	GS_PLAYING,		// Playing the game
 	GS_COLLIDE,		// Collided with something
 	GS_PAUSED   	// New 12/04/2025 CC
-};
+} GameState;
 
 struct Game
 {
@@ -1049,7 +1050,7 @@ void select_controls(void)
     draw_big_text(5, 9, "64", VCOL_YELLOW);
 
     // Copyright notice
-    screen_print_petscii(18, 09, "CHRIS CHANDLER", VCOL_CYAN);
+    screen_print_petscii(18, 9,  "CHRIS CHANDLER", VCOL_CYAN);
     screen_print_petscii(21, 11, "COPYRIGHT", VCOL_WHITE);
     screen_print_petscii(21, 13, "(C)  2026", VCOL_WHITE);
 
