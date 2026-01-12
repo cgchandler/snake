@@ -68,7 +68,7 @@ typedef struct
 	byte	pos;		// Tail start
 } Snake;
 
-typedef enum 
+typedef enum
 {
 	GS_READY,		// Getting ready
 	GS_PLAYING,		// Playing the game
@@ -76,7 +76,7 @@ typedef enum
 	GS_PAUSED   	// New 12/04/2025 CC
 } GameState;
 
-struct Game
+typedef struct Game
 {
     GameState   state;	
     byte        count;
@@ -86,13 +86,15 @@ struct Game
     byte        pauseVisible;
     word        score;          // hearts collected
     word        highScore;      // NEW: best score so far
-}   TheGame;
+} Game;
 
-enum ControlMode
+Game TheGame;
+
+typedef enum
 {
     CTRL_JOYSTICK = 0,
     CTRL_KEYBOARD = 1
-};
+} ControlMode;
 
 static byte g_controlMode = CTRL_JOYSTICK;
 
