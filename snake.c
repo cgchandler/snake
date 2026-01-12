@@ -1,3 +1,5 @@
+// © 2026 Christopher G Chandler
+// Licensed under the MIT License. See LICENSE file in the project root.
 #include <c64/joystick.h>
 #include <c64/vic.h>
 #include <c64/keyboard.h>
@@ -45,6 +47,10 @@
 #define SID_CTRL_SAW    0x20
 #define SID_CTRL_RECT   0x40
 #define SID_CTRL_NOISE  0x80
+
+#define PETSCII_CIRCLE  81      // PETSCII code for filled circle (used for snake head)
+#define PETSCII_HEART   83      // PETSCII code for heart (used for fruit)
+#define PETSCII_BLOCK   160     // PETSCII code for solid block (used for borders)
 
 // Position/Direction on screen
 struct Point
@@ -105,6 +111,7 @@ static byte g_controlMode = CTRL_JOYSTICK;
 #define HS_FLASH_INTERVAL 4   // frames between on/off, tweak for faster/slower flash
 #define SPEED_MAX_VALUE   (MAX_DELAY_FRAMES - MIN_DELAY_FRAMES)   // 16 for 20..4
 #define SPEED_CURVE_SCALE 6   // try 2, 3, or 4 to adjust how fast it ramps
+#define COLLIDE_FRAMES 120    // frames to show collision flash
 
 static byte pause_backup_chars[PAUSE_H][PAUSE_W];
 static byte pause_backup_colors[PAUSE_H][PAUSE_W];
@@ -127,6 +134,7 @@ void sound_heart(void);
 void sound_update(void);
 void sound_highscore(void);
 void sound_death(void);
+void sound_stop_all(void);
 
 static byte fruit_x = 0;
 static byte fruit_y = 0;
@@ -168,6 +176,92 @@ void screen_print_petscii(byte x, byte y, const char *text, byte color)
 		byte sc = petscii_to_screen(c);
 		screen_put(x++, y, sc, color);
 	}
+}
+
+// Draw big 5x5 block text using PETSCII_BLOCK. Characters are drawn
+// with no horizontal gap so up to 8 characters fit across 40 columns.
+static unsigned char get_font_row(char ch, int row)
+{
+    switch (ch)
+    {
+        case 'S':
+            // 11111
+            // 10000
+            // 11111
+            // 00001
+            // 11111
+            return (row==0)?0b11111:(row==1)?0b10000:(row==2)?0b11111:(row==3)?0b00001:0b11111;
+        case 'N':
+            // 10001
+            // 11001
+            // 10101
+            // 10011
+            // 10001
+            return (row==0)?0b10001:(row==1)?0b11001:(row==2)?0b10101:(row==3)?0b10011:0b10001;
+        case 'A':
+            // 01110
+            // 10001
+            // 11111
+            // 10001
+            // 10001
+            return (row==0)?0b01110:(row==1)?0b10001:(row==2)?0b11111:(row==3)?0b10001:0b10001;
+        case 'K':
+            // 10001
+            // 10010
+            // 11100
+            // 10010
+            // 10001
+            return (row==0)?0b10001:(row==1)?0b10010:(row==2)?0b11100:(row==3)?0b10010:0b10001;
+        case 'E':
+            // 11111
+            // 10000
+            // 11110
+            // 10000
+            // 11111
+            return (row==0)?0b11111:(row==1)?0b10000:(row==2)?0b11110:(row==3)?0b10000:0b11111;
+        case '6':
+            // 11111
+            // 10000
+            // 11111
+            // 10001
+            // 11110
+            return (row==0)?0b11111:(row==1)?0b10000:(row==2)?0b11111:(row==3)?0b10001:0b11111;
+        case '4':
+            // 10010
+            // 10010
+            // 11111
+            // 00010
+            // 00010
+            return (row==0)?0b10010:(row==1)?0b10010:(row==2)?0b11111:(row==3)?0b00010:0b00010;
+        case ' ':
+        default:
+            return 0x00;
+    }
+}
+
+static void draw_big_text(byte x0, byte y0, const char *text, char color)
+{
+    for (int i = 0; text[i]; i++)
+    {
+        char ch = text[i];
+        for (int row = 0; row < 5; row++)
+        {
+            unsigned char bits = get_font_row(ch, row) & 0x1F; // 5 bits
+            for (int col = 0; col < 5; col++)
+            {
+                if (bits & (1 << (4 - col)))
+                {
+                    /* Add one-column gap between characters by using 6-wide
+                       spacing (5 pixels + 1 blank). */
+                    screen_put((byte)(x0 + i*6 + col), (byte)(y0 + row), PETSCII_BLOCK, color);
+                }
+                else
+                {
+                    // leave existing background (or explicitly clear with space)
+                }
+            }
+        }
+    }
 }
 
 // Print a fixed width decimal number at (x,y)
@@ -327,7 +421,7 @@ void screen_fruit(void)
     } while (screen_get(x, y) != ' ');
 
 	// Put the heart on screen
-    screen_put(x, y, 83, VCOL_RED);
+    screen_put(x, y, PETSCII_HEART, VCOL_RED);
 
 	// Save the heart position
     fruit_x = x;
@@ -343,15 +437,15 @@ void screen_init(void)
 	// Bottom and top row (top at y=1, bottom at y=24)
 	for(byte x=0; x<40; x++)
 	{
-		screen_put(x,  1, 0xa0, VCOL_LT_GREY);
-		screen_put(x, 24, 0xa0, VCOL_LT_GREY);
+		screen_put(x,  1, PETSCII_BLOCK, VCOL_LT_GREY);
+		screen_put(x, 24, PETSCII_BLOCK, VCOL_LT_GREY);
 	}
 
 	// Left and right column, from y=1 to y=24
 	for(byte y=1; y<25; y++)
 	{
-		screen_put( 0,  y, 0xa0, VCOL_LT_GREY);
-		screen_put( 39, y, 0xa0, VCOL_LT_GREY);			
+		screen_put( 0,  y, PETSCII_BLOCK, VCOL_LT_GREY);
+		screen_put( 39, y, PETSCII_BLOCK, VCOL_LT_GREY);			
 	}
 }
 
@@ -371,7 +465,7 @@ void snake_init(Snake * s)
 	s->dir.y = 0;
 
 	// Show head
-	screen_put(s->head.x, s->head.y, 81, VCOL_WHITE);
+	screen_put(s->head.x, s->head.y, PETSCII_CIRCLE, VCOL_WHITE);
 }
 
 bool snake_advance(Snake * s)
@@ -383,7 +477,7 @@ bool snake_advance(Snake * s)
 	// step sound on every advance
 	sound_step();
 
-	screen_put(s->head.x, s->head.y, 81, VCOL_LT_BLUE);
+	screen_put(s->head.x, s->head.y, PETSCII_CIRCLE, VCOL_LT_BLUE);
 
 	// Advance head
 	s->head.x += s->dir.x;
@@ -393,14 +487,14 @@ bool snake_advance(Snake * s)
 	char ch = screen_get(s->head.x, s->head.y);
 
 	// Draw head
-	screen_put(s->head.x, s->head.y, 81, VCOL_WHITE);
+	screen_put(s->head.x, s->head.y, PETSCII_CIRCLE, VCOL_WHITE);
 
 	// Clear tail
 	byte tpos = (byte)(s->pos - s->length);
 	screen_put(s->tail[tpos].x, s->tail[tpos].y, ' ', VCOL_BLACK);
 
 	// Did snake collect the fruit
-    if (ch == 83)
+    if (ch == PETSCII_HEART)
     {
         // Extend tail
         s->length++;
@@ -437,7 +531,7 @@ bool snake_advance(Snake * s)
     // If something has erased it (and the head is not currently there), spawn a new one.
     {
         char c = screen_get(fruit_x, fruit_y);
-        if (c != 83 &&
+        if (c != PETSCII_HEART &&
             !(s->head.x == fruit_x && s->head.y == fruit_y))
         {
             screen_fruit();
@@ -455,7 +549,7 @@ void snake_flash(Snake * s, char c)
 	{
 		// Set color
 		byte tpos = (byte)(s->pos - i - 1);
-		screen_put(s->tail[tpos].x, s->tail[tpos].y, 81, c);
+		screen_put(s->tail[tpos].x, s->tail[tpos].y, PETSCII_CIRCLE, c);
 	}
 }
 
@@ -542,7 +636,7 @@ void game_state(GameState state)
 		break;
 
 	case GS_COLLIDE:
-		TheGame.count = 16;
+        TheGame.count = COLLIDE_FRAMES;
 		break;
 
 	case GS_PAUSED:
@@ -613,7 +707,7 @@ void pause_draw_banner(void)
 			else
 			{
 				// Top/bottom row: solid block for "large" look
-				screen_put(sx, sy, 0xa0, VCOL_DARK_GREY);
+				screen_put(sx, sy, PETSCII_BLOCK, VCOL_DARK_GREY);
 			}
 		}
 	}
@@ -874,6 +968,30 @@ void sound_update(void)
     }
 }
 
+// Stop any ongoing sounds and turn off SID gates
+void sound_stop_all(void)
+{
+    // Stop timers/state
+    death_frames = 0;
+    sfx2_frames  = 0;
+    hs_active    = 0;
+    hs_timer     = 0;
+    hs_index     = 0;
+
+    // Turn off gates on all voices
+    v1_ctrl &= (byte)~SID_CTRL_GATE;
+    SID_V1_CTRL = v1_ctrl;
+
+    v2_ctrl &= (byte)~SID_CTRL_GATE;
+    SID_V2_CTRL = v2_ctrl;
+
+    v3_ctrl &= (byte)~SID_CTRL_GATE;
+    SID_V3_CTRL = v3_ctrl;
+
+    // Reset step toggle
+    step_toggle = 0;
+}
+
 // Unified input: fills jx, jy, btn based on selected control mode
 // jx: -1 left, +1 right, 0 none
 // jy: -1 up,  +1 down,  0 none
@@ -909,33 +1027,50 @@ void read_input(sbyte *jx, sbyte *jy, byte *btn)
     }
 }
 
+// Check for Joystick button
+static int is_fire_pressed(void) {
+    joy_poll(0);                // poll joystick port 2
+    return joyb[0];             // joystick 2 button pressed
+}
+
+// Direct Hardware Scan for Spacebar - doesn't rely on keyb_poll() isn't reliable with joystick
+static int is_space_pressed(void) {
+    *(volatile byte*)0xDC00 = 0x7F; 
+    return ((*(volatile byte*)0xDC01) & 0x10) == 0;
+}
+
 void select_controls(void)
 {
     // Simple selection screen
     screen_init();
 
-    screen_print_petscii(11, 8,  "SNAKE CONTROLS", VCOL_LT_GREY);
-    screen_print_petscii(8,  11, "PRESS J FOR JOYSTICK", VCOL_WHITE);
-    screen_print_petscii(8,  13, "PRESS K FOR KEYBOARD", VCOL_WHITE);
-	screen_print_petscii(8,  15, "    SPACE = PAUSE", VCOL_YELLOW);
-	screen_print_petscii(8,  16, "        W = UP", VCOL_YELLOW);
-	screen_print_petscii(8,  17, "        A = LEFT", VCOL_YELLOW);
-	screen_print_petscii(8,  18, "        S = DOWN", VCOL_YELLOW);
-	screen_print_petscii(8,  19, "        D = RIGHT", VCOL_YELLOW);
+    // Large title using 5x5 block font 
+    draw_big_text(5, 3, "SNAKE", VCOL_YELLOW);
+    draw_big_text(5, 9, "64", VCOL_YELLOW);
 
-    // Wait for J or K selection
+    // Copyright notice
+    screen_print_petscii(18, 09, "CHRIS CHANDLER", VCOL_CYAN);
+    screen_print_petscii(21, 11, "COPYRIGHT", VCOL_WHITE);
+    screen_print_petscii(21, 13, "(C)  2026", VCOL_WHITE);
+
+    // Control hints
+    screen_print_petscii(16,  16, "CONTROLS", VCOL_LT_RED);
+    screen_print_petscii(11,  18, "JOYSTICK ON PORT 2", VCOL_WHITE);
+    screen_print_petscii(13,  20, "KEYBOARD  WASD", VCOL_WHITE);
+    screen_print_petscii(4,   22, "PAUSE - FIRE BUTTON OR SPACE BAR", VCOL_WHITE);
+
+    // Wait for Joystick button or Spacebar
     while (1)
     {
         vic_waitFrame();
-        keyb_poll();
 
-        if (key_pressed(KSCAN_J))
+        if (is_fire_pressed())
         {
             g_controlMode = CTRL_JOYSTICK;
             break;
         }
 
-        if (key_pressed(KSCAN_K))
+        if (is_space_pressed())
         {
             g_controlMode = CTRL_KEYBOARD;
             break;
@@ -992,11 +1127,30 @@ void game_loop(void)
 			break;
 		}
 
-		case GS_COLLIDE:
-			snake_flash(&TheGame.snake, FlashColors[(16 - TheGame.count) / 2]);
-			if (!--TheGame.count)
-				game_state(GS_READY);
-			break;
+        case GS_COLLIDE:
+        {
+            int flash_count = (int)(sizeof(FlashColors) / sizeof(FlashColors[0]));
+            int step = COLLIDE_FRAMES / flash_count;
+            int idx = 0;
+
+            /* Avoid division by zero and ensure idx is in range */
+            if (step <= 0) step = 1;
+            idx = (COLLIDE_FRAMES - TheGame.count) / step;
+            if (idx < 0) idx = 0;
+            if (idx >= flash_count) idx = flash_count - 1;
+
+            snake_flash(&TheGame.snake, FlashColors[idx]);
+
+            if (!--TheGame.count)
+            {
+                // Stop sounds then show controls and restart
+                sound_stop_all();
+                select_controls();
+                random_init();
+                game_state(GS_READY);
+            }
+        }
+        break;
 
 		case GS_PAUSED:
 		{
