@@ -61,3 +61,11 @@ This project significantly expands the original Snake sample included with Oscar
 
 ## Play Online
 [Play Snake online running in Vice.js](https://www.cehost.com/snake/)
+
+## License
+
+This project is licensed under the MIT License.
+
+You are free to use, modify, and distribute this software for personal or commercial purposes, provided that the original copyright notice and license text are included with any substantial portions of the code.
+
+See the [LICENSE](LICENSE) file for full details.
